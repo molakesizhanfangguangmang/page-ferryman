@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+config.json
+txt-toc-rule.json
+/state/
+bridge-cache.json
+bridge.lock
+test/calibration.local.json
