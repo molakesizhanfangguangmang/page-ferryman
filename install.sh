@@ -4,6 +4,7 @@
 #   sh install.sh [容器名] [宿主上的数据目录] [选项]
 #
 # 选项：
+#   --no-event-trigger  只安装桥，不注入 Talebook WebDAV（默认会一起安装）
 #   --apply         把 config.json 的 apply 改成 true（默认 false，装完先干跑）
 #   --no-start      只放文件与配置，不启动循环
 #   --rearm         静默补齐：只保证容器里的循环在跑，不复制文件、不扫描（定时任务用）
@@ -27,10 +28,12 @@ REARM=0
 CRON=0
 QUIET=0
 WANT_APPLY=""
+EVENT=1
 
 for a in "$@"; do
     case "$a" in
         --apply) WANT_APPLY=1 ;;
+        --no-event-trigger) EVENT=0 ;;
         --no-start) START=0 ;;
         --rearm) REARM=1; START=1 ;;
         --install-cron) CRON=1 ;;
@@ -148,11 +151,44 @@ EOF
     rm -f "$TMP"
 }
 
+install_event_trigger() {
+    [ "$EVENT" = 1 ] || { say "WebDAV 事件触发  跳过（--no-event-trigger）"; return 0; }
+    [ -f "$SRC/event_patch.py" ] || die "缺少 event_patch.py，无法安装 WebDAV 事件触发"
+    [ -f "$SRC/trigger.sh" ] || die "缺少 trigger.sh，无法安装 WebDAV 事件触发"
+
+    DAV=$(docker exec "$NAME" sh -c 'test -f /var/www/talebook/webserver/webdav/dav_provider.py && echo /var/www/talebook/webserver/webdav/dav_provider.py || true')
+    [ -n "$DAV" ] || die "找不到 Talebook WebDAV 源码 dav_provider.py，桥仍可安装但事件触发未安装"
+    TMP=$(mktemp)
+    BACKUP_DIR=/var/tmp/reading-progress-bridge/webdav-backup
+    docker cp "$NAME:$DAV" "$TMP"
+    if ! python3 "$SRC/event_patch.py" "$TMP" >/tmp/reading-progress-event-patch.log 2>&1; then
+        cat /tmp/reading-progress-event-patch.log >&2
+        rm -f "$TMP"
+        die "Talebook WebDAV 结构不匹配，未修改原文件"
+    fi
+    docker exec -u root "$NAME" sh -c "mkdir -p '$BACKUP_DIR'"
+    docker exec -u root "$NAME" sh -c "if [ ! -f '$BACKUP_DIR/dav_provider.py' ]; then cp '$DAV' '$BACKUP_DIR/dav_provider.py'; fi"
+    docker cp "$TMP" "$NAME:$DAV" >/dev/null
+    rm -f "$TMP"
+    docker cp "$SRC/trigger.sh" "$NAME:/opt/reading-progress-bridge/trigger.sh" >/dev/null
+    docker exec -u root "$NAME" chmod 755 /opt/reading-progress-bridge/trigger.sh
+    if ! docker exec "$NAME" python3 -m py_compile "$DAV"; then
+        say "WebDAV 补丁语法检查失败，尝试恢复备份"
+        docker exec -u root "$NAME" cp "$BACKUP_DIR/dav_provider.py" "$DAV"
+        die "WebDAV 事件触发未安装"
+    fi
+    docker exec "$NAME" supervisorctl restart tornado >/dev/null 2>&1 || true
+    say "WebDAV 事件触发  已安装（上传进度文件后约5秒触发，备份在 $BACKUP_DIR）"
+}
+
 # ---------------------------------------------------------------- --rearm：只保证在跑
 if [ "$REARM" = 1 ]; then
     rearm
     exit $?
 fi
+
+# ---------------------------------------------------------------- WebDAV 事件触发
+install_event_trigger
 
 # ---------------------------------------------------------------- 放文件
 say "容器      $NAME"
@@ -164,7 +200,7 @@ mkdir -p "$DST" 2>/dev/null || true
 [ -d "$DST" ] || die "写不进 $DATA，用 root 或 sudo 跑：sudo sh $0 $NAME $DATA"
 [ -w "$DST" ] || die "写不进 $DST，用 root 或 sudo 跑：sudo sh $0 $NAME $DATA"
 
-for f in bridge.py cfi.py txt.py run.sh README.md config.example.json install.sh uninstall.sh LICENSE; do
+for f in bridge.py cfi.py txt.py run.sh trigger.sh event_patch.py README.md config.example.json install.sh uninstall.sh LICENSE; do
     [ -f "$SRC/$f" ] && cp "$SRC/$f" "$DST/$f"
 done
 chmod +x "$DST/run.sh" 2>/dev/null || true
@@ -175,7 +211,7 @@ if [ ! -f "$DST/config.json" ]; then
   "_说明": "apply 改成 true 才会真写数据；interval_seconds 是每轮间隔；skip_books 里写要跳过的书库编号；改完重跑 install.sh 生效。",
   "data": "/data",
   "reader_user": "",
-  "interval_seconds": 300,
+  "interval_seconds": 600,
   "threshold_chars": 200,
   "threshold_percent": 0.3,
   "apply": false,
@@ -218,7 +254,7 @@ docker exec -u "$OWNER" "$NAME" python3 "$INNER/bridge.py" sync || true
 
 # ---------------------------------------------------------------- 定时补齐
 if [ "$CRON" = 1 ]; then
-    LINE="*/5 * * * * root sh $DST/install.sh --rearm --quiet >> /var/log/reading-progress-bridge-cron.log 2>&1"
+    LINE="*/10 * * * * root sh $DST/install.sh --rearm --quiet >> /var/log/reading-progress-bridge-cron.log 2>&1"
     if [ "$(id -u)" = "0" ]; then
         printf '# 阅读进度桥：容器重建/重启后把容器里的循环补起来\n%s\n' "$LINE" > /etc/cron.d/reading-progress-bridge
         chmod 644 /etc/cron.d/reading-progress-bridge
