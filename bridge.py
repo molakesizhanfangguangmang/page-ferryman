@@ -281,6 +281,7 @@ def align(cache):
     for bid in sorted(lib):
         b = lib[bid]
         rec = {"lib": b, "moeli": None, "devices": {}}
+        used_cloud = set()
 
         for row in moeli:
             hit = None
@@ -310,6 +311,7 @@ def align(cache):
                 eff = (bk["idx"], bk["pos"])
                 src = "书架快照(%s)" % info["zip"][:10]
                 if bk["cloud"]:
+                    used_cloud.add(bk["cloud"][0])
                     c = bk["cloud"][1]
                     if (c.get("durChapterTime") or 0) > (bk["time"] or 0):
                         eff = (c.get("durChapterIndex"), c.get("durChapterPos"))
@@ -317,6 +319,32 @@ def align(cache):
                 bk["eff"] = eff
                 bk["eff_src"] = src
                 rec["devices"][dev] = bk
+
+        # 新书可能已经有 bookProgress 文件，但还没进入 legado 的 backup zip。
+        # 文件名开头的书库编号是后备锚点，例如 29.xxx.json -> (29)。
+        for fname, o in cloud.items():
+            if fname in used_cloud:
+                continue
+            m = re.match(r"^0*(\d+)[.\uff0e\s]", fname)
+            if not m or int(m.group(1)) != bid:
+                continue
+            idx = o.get("durChapterIndex")
+            pos = o.get("durChapterPos")
+            rec["devices"]["云端文件"] = {
+                "name": o.get("name") or fname_tag(fname),
+                "author": o.get("author") or "",
+                "idx": idx, "pos": pos,
+                "time": o.get("durChapterTime") or 0,
+                "chapter": o.get("durChapterTitle"),
+                "chapters": o.get("totalChapterNum"),
+                "cloud": (fname, o),
+                "eff": (idx, pos),
+                "eff_src": "云文件(%s)" % fname_tag(fname),
+            }
+            used_cloud.add(fname)
+            if o.get("totalChapterNum"):
+                b["txt_chapters"] = max(b.get("txt_chapters") or 0,
+                                         o["totalChapterNum"])
         recs.append(rec)
     return recs, amb
 
@@ -476,8 +504,10 @@ def plan(recs, cache):
                 continue
             if totals:
                 gap = abs_chars(totals, *lead[1]) - abs_chars(totals, *pos)
-                if gap < thr:
-                    skips.append((b, "%s 落后 %d 字（< %d），不动" % (name, gap, thr)))
+                # 跨软件时章节不同优先保证章节一致；同章才用字数阈值。
+                # 章节/规则无法换算会在上面作为错误跳过，不在这里硬写错误位置。
+                if lead[1][0] == pos[0] and gap < thr:
+                    skips.append((b, "%s 同章落后 %d 字（< %d），不动" % (name, gap, thr)))
                     continue
             elif lead[1][0] == pos[0] and abs(lead[1][1] - pos[1]) < THRESH_CHARS:
                 skips.append((b, "%s 落后不到 %d 字（同软件，没解析正文），不动"
