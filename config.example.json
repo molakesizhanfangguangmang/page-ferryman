@@ -1,0 +1,12 @@
+{
+  "_说明": "复制成同目录的 config.json 再改。环境变量 RPB_<大写键名> 优先于这个文件，命令行 --apply 等价于 apply: true。",
+  "data": "/data",
+  "reader_user": "",
+  "interval_seconds": 300,
+  "threshold_chars": 200,
+  "threshold_percent": 0.3,
+  "apply": false,
+  "state_dir": "/var/tmp/reading-progress-bridge",
+  "rules_file": "",
+  "skip_books": []
+}
