@@ -17,10 +17,26 @@
 
 ```sh
 curl -fsSLO https://github.com/molakesizhanfangguangmang/talebook-reading-progress-bridge/releases/latest/download/install-reading-progress-bridge.sh
+```
+
+安装脚本会同时安装阅读进度桥和 Talebook WebDAV 事件触发。App 上传 `book.db` 或 `bookProgress/*.json` 完成后，桥会在几秒内运行；10 分钟扫描作为兜底。
+
+```sh
 sudo sh install-reading-progress-bridge.sh
 ```
 
-安装器默认会自动找到 Talebook 容器和 `/data` 对应的数据目录，也可以直接指定：
+安装器会先备份 Talebook 的 WebDAV 文件，再注入触发代码。备份在容器内：
+
+```text
+/var/tmp/reading-progress-bridge/webdav-backup/dav_provider.py
+```
+
+如果只想安装桥、不改 Talebook WebDAV：
+
+```sh
+sudo sh install-reading-progress-bridge.sh --no-event-trigger
+```
+
 
 ```sh
 sudo sh install-reading-progress-bridge.sh talebook /srv/talebook/data
@@ -40,7 +56,7 @@ sh install-reading-progress-bridge.sh --extract-only /tmp/reading-progress-bridg
 
 ## 运行方式
 
-安装脚本会把程序放到数据目录的 `.reading-progress-bridge/`，并在 Talebook 容器里注册为 supervisord 程序。默认每 5 分钟检查一次，容器重启后会跟着启动。
+安装脚本会把程序放到数据目录的 `.reading-progress-bridge/`，并在 Talebook 容器里注册为 supervisord 程序。默认每 10 分钟检查一次，容器重启后会跟着启动。
 
 容器重建会删掉容器里的 supervisord 配置。重建后重新执行一次安装器即可：
 
@@ -48,7 +64,7 @@ sh install-reading-progress-bridge.sh --extract-only /tmp/reading-progress-bridg
 sudo sh install-reading-progress-bridge.sh
 ```
 
-也可以让宿主机每 5 分钟自动补一次：
+也可以让宿主机每 10 分钟自动补一次：
 
 ```sh
 sudo sh install-reading-progress-bridge.sh --install-cron
@@ -68,7 +84,7 @@ sudo sh install-reading-progress-bridge.sh --install-cron
 
 ```json
 {
-  "interval_seconds": 300,
+  "interval_seconds": 600,
   "threshold_chars": 200,
   "threshold_percent": 0.3,
   "apply": false
