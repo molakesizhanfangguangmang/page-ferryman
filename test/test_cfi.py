@@ -86,8 +86,8 @@ def roundtrip(epub, label):
 def main():
     samples = find_epubs(MAX_BOOKS)
     if not samples:
-        print("!! 书库里找不到 epub（%s）" % LIB)
-        return 1
+        print("跳过：书库里找不到 epub（%s）" % LIB)
+        return 0
     for label, path in samples:
         epub = EpubDoc(path)
         print("=" * 74)
