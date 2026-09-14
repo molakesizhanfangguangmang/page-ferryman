@@ -4,6 +4,7 @@
 #   sh run.sh          一直跑（每 interval_seconds 一轮）
 #   sh run.sh --once   只跑一轮
 #
+# 兜底间隔默认 10 分钟；WebDAV 事件触发会在文件写完后立即跑一次。
 # 是否真写数据由 config.json 的 apply 决定；apply 为 false 时只算不写。
 # 日志默认落在 state_dir/run.log，超过 5MB 轮转一份 .1。
 
