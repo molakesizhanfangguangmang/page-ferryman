@@ -43,6 +43,16 @@ fi
 
 docker exec "$NAME" pkill -f '\.reading-progress-bridge/run\.sh' >/dev/null 2>&1 && echo "停了后台循环" || true
 
+# 还原 WebDAV 事件触发补丁（只还原首次备份，不动数据）
+DAV=/var/www/talebook/webserver/webdav/dav_provider.py
+EVENT_BACKUP=/var/tmp/reading-progress-bridge/webdav-backup/dav_provider.py
+if docker exec "$NAME" sh -c "test -f '$EVENT_BACKUP' && test -f '$DAV'" >/dev/null 2>&1; then
+    docker exec -u root "$NAME" cp "$EVENT_BACKUP" "$DAV"
+    docker exec -u root "$NAME" rm -f /opt/reading-progress-bridge/trigger.sh
+    docker exec "$NAME" supervisorctl restart tornado >/dev/null 2>&1 || true
+    echo "还原了 Talebook WebDAV 文件（备份保留在 $EVENT_BACKUP）"
+fi
+
 if [ "$PURGE" = 1 ]; then
     if [ -n "$DATA" ] && [ -d "$DST" ]; then
         docker exec -u root "$NAME" rm -rf "$DST" >/dev/null 2>&1 || rm -rf "$DST"
