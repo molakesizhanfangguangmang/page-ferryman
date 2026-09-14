@@ -14,7 +14,7 @@ set -eu
 
 VERSION=${VERSION:-1.0.2}
 HERE=$(cd "$(dirname "$0")" && pwd)
-FILES="README.md LICENSE .gitignore build.sh bridge.py cfi.py txt.py run.sh install.sh uninstall.sh config.example.json test/test_config.py test/test_cfi.py test/test_txt.py test/test_e2e_txt.py"
+FILES="README.md LICENSE .gitignore build.sh bridge.py cfi.py txt.py run.sh trigger.sh event_patch.py install.sh uninstall.sh config.example.json test/test_config.py test/test_cfi.py test/test_txt.py test/test_e2e_txt.py"
 OUT=${OUT:-"$HERE/../reading-progress-bridge-v$VERSION.tar.gz"}
 SINGLE=${SINGLE:-"$HERE/../install-reading-progress-bridge.sh"}
 RELEASE_NOTE=${RELEASE_NOTE:-"$HERE/../RELEASE.md"}
