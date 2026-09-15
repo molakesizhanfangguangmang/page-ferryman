@@ -181,6 +181,31 @@ install_event_trigger() {
     say "WebDAV 事件触发  已安装（上传进度文件后约5秒触发，备份在 $BACKUP_DIR）"
 }
 
+install_notify_settings() {
+    [ "$EVENT" = 1 ] || return 0
+    [ -f "$SRC/settings_patch.py" ] || die "缺少 settings_patch.py，无法安装页渡者设置"
+    [ -f "$SRC/notify.py" ] || die "缺少 notify.py，无法安装页渡者通知"
+    [ -f "$SRC/notify-ui.js" ] || die "缺少 notify-ui.js，无法安装页渡者设置页"
+    ROOT=$(mktemp -d)
+    trap 'rm -rf "$ROOT"' EXIT INT TERM
+    mkdir -p "$ROOT/webserver/handlers" "$ROOT/app/dist"
+    docker cp "$NAME:/var/www/talebook/webserver/handlers/admin.py" "$ROOT/webserver/handlers/admin.py"
+    docker cp "$NAME:/var/www/talebook/app/dist/index.html" "$ROOT/app/dist/index.html"
+    if ! python3 "$SRC/settings_patch.py" "$ROOT" >/tmp/page-ferryman-settings-patch.log 2>&1; then
+        cat /tmp/page-ferryman-settings-patch.log >&2
+        die "Talebook 设置页结构不匹配，未修改原文件"
+    fi
+    docker exec -u root "$NAME" sh -c 'mkdir -p /var/tmp/reading-progress-bridge/settings-backup /var/www/talebook/webserver'
+    docker exec -u root "$NAME" sh -c 'if [ ! -f /var/tmp/reading-progress-bridge/settings-backup/admin.py ]; then cp /var/www/talebook/webserver/handlers/admin.py /var/tmp/reading-progress-bridge/settings-backup/admin.py; fi; if [ ! -f /var/tmp/reading-progress-bridge/settings-backup/index.html ]; then cp /var/www/talebook/app/dist/index.html /var/tmp/reading-progress-bridge/settings-backup/index.html; fi'
+    docker cp "$ROOT/webserver/handlers/admin.py" "$NAME:/var/www/talebook/webserver/handlers/admin.py"
+    docker cp "$ROOT/app/dist/index.html" "$NAME:/var/www/talebook/app/dist/index.html"
+    docker cp "$SRC/notify.py" "$NAME:/var/www/talebook/webserver/page_ferryman_notify.py"
+    docker cp "$SRC/notify-ui.js" "$NAME:/var/www/talebook/app/dist/static/page-ferryman-notify.js"
+    docker exec "$NAME" python3 -m py_compile /var/www/talebook/webserver/handlers/admin.py /var/www/talebook/webserver/page_ferryman_notify.py
+    rm -rf "$ROOT"
+    trap - EXIT INT TERM
+    say "页渡者设置  已注入（管理员设置页可配置 Webhook 或 Telegram Bot）"
+}
 # ---------------------------------------------------------------- --rearm：只保证在跑
 if [ "$REARM" = 1 ]; then
     rearm
@@ -189,6 +214,7 @@ fi
 
 # ---------------------------------------------------------------- WebDAV 事件触发
 install_event_trigger
+install_notify_settings
 
 # ---------------------------------------------------------------- 放文件
 say "容器      $NAME"
@@ -200,7 +226,7 @@ mkdir -p "$DST" 2>/dev/null || true
 [ -d "$DST" ] || die "写不进 $DATA，用 root 或 sudo 跑：sudo sh $0 $NAME $DATA"
 [ -w "$DST" ] || die "写不进 $DST，用 root 或 sudo 跑：sudo sh $0 $NAME $DATA"
 
-for f in bridge.py cfi.py txt.py run.sh trigger.sh event_patch.py README.md config.example.json install.sh uninstall.sh LICENSE; do
+for f in bridge.py cfi.py txt.py notify.py run.sh trigger.sh event_patch.py settings_patch.py notify-ui.js README.md config.example.json install.sh uninstall.sh LICENSE; do
     [ -f "$SRC/$f" ] && cp "$SRC/$f" "$DST/$f"
 done
 chmod +x "$DST/run.sh" 2>/dev/null || true
