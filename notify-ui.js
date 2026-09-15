@@ -4,7 +4,8 @@
   window.__pageFerrymanNotify = true;
   const api = '/api/page-ferryman/notify';
   const css = `
-#page-ferryman-notify-panel{box-sizing:border-box;max-width:860px;margin:24px 0;padding:24px;background:#fff;border:1px solid #d9dee7;border-radius:8px;box-shadow:0 2px 8px rgba(20,35,55,.06);color:#253044;font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+#page-ferryman-notify-panel{box-sizing:border-box;width:calc(100% - 48px);max-width:860px;margin:24px auto;padding:24px;background:#fff;border:1px solid #d9dee7;border-radius:8px;box-shadow:0 2px 8px rgba(20,35,55,.06);color:#253044;font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+#page-ferryman-notify-panel.pf-sidebar-safe{margin-left:24px;margin-right:24px}
 #page-ferryman-notify-panel *{box-sizing:border-box}
 #page-ferryman-notify-panel h3{margin:0 0 6px;font-size:18px;font-weight:600;color:#172033}
 #page-ferryman-notify-panel .pf-help{margin:0 0 20px;color:#687386}
