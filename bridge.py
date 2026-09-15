@@ -31,6 +31,10 @@ import zipfile
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from cfi import EpubDoc, chapter_char_total  # noqa: E402
 from txt import TxtBook, TxtError, parse_txtloc, load_rules as load_txt_rules  # noqa: E402
+try:
+    import notify
+except ImportError:
+    notify = None
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -622,6 +626,14 @@ def apply_plan(acts, state):
     return done
 
 
+def _notify_error(kind, message, **extra):
+    if notify is not None:
+        try:
+            notify.send({"kind": kind, "message": message, **extra})
+        except Exception:
+            pass
+
+
 def main():
     argv = sys.argv[1:]
     cmd = argv[0] if argv and not argv[0].startswith("-") else "scan"
@@ -656,9 +668,13 @@ def main():
             print("对不准（已跳过）：")
             for dev, name, cands in amb:
                 if cands:
-                    print("  %s %r -> 可能：%s" % (dev, name, "、".join(cands)))
+                    msg = "%s %r -> 可能：%s" % (dev, name, "、".join(cands))
+                    print("  " + msg)
+                    _notify_error("ambiguous_book", msg, device=dev, name=name)
                 else:
-                    print("  %s %r -> 书库里没有这本" % (dev, name))
+                    msg = "%s %r -> 书库里没有这本" % (dev, name)
+                    print("  " + msg)
+                    _notify_error("book_not_found", msg, device=dev, name=name)
     elif cmd == "sync":
         recs, _amb = align(cache)
         acts, skips = plan(recs, cache)
