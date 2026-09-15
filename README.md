@@ -2,22 +2,16 @@
 
 “摆渡”出自中国文学中反复出现的渡河意象，摆渡人不替行者决定去处，只负责把人送到彼岸。
 “页渡者”借这个意象，为不同阅读器之间失落的进度搭一叶小舟，让同一本书在不同设备上接得上。
+
 *从安卓渡向 iOS，从一页渡向另一页。*
 
 *不改书，只渡进度；不改章，只接前后。*
 
-把同一套 Talebook 里的 legado（安卓）和 Moeli Reader（iOS）阅读进度对到一起。
-
-它会在进度文件上传完成后立即检查两边的位置；10 分钟扫描作为兜底。差距超过规则后，桥会把落后的一边改到领先的位置；App 下次同步时仍会按自己的规则弹出“云端进度更靠前”的确认框，脚本不替你点确认。
+把同一套 Talebook 里的 legado（安卓）和 Moeli Reader（iOS）阅读进度对到一起。上传进度后会立即检查两边的位置，10 分钟扫描作为兜底；跨软件 txt 章节不同优先保证章节一致，同章才使用字数阈值。
 
 ## 安装
 
-需要：
-
-- Talebook 运行在 Docker 里，数据目录挂载到容器的 `/data`
-- 容器里有 Python 3
-- 同一个 Talebook 已经生成过 `reader/<用户号>/legado` 和 `reader/<用户号>/moeli_reader`
-- 宿主机可以执行 Docker，并能写入 Talebook 数据目录
+需要 Docker Talebook、容器内 Python 3，以及宿主机执行 Docker 和写入数据目录的权限。Talebook 数据目录应挂载到容器 `/data`。
 
 从 [Releases](https://github.com/molakesizhanfangguangmang/page-ferryman/releases) 下载单文件安装器：
 
@@ -26,38 +20,75 @@ curl -fsSLO https://github.com/molakesizhanfangguangmang/page-ferryman/releases/
 sudo sh install-reading-progress-bridge.sh
 ```
 
-安装脚本会同时安装阅读进度桥和 Talebook WebDAV 事件触发。App 上传 `book.db` 或 `bookProgress/*.json` 完成后，桥会在几秒内运行；10 分钟扫描作为兜底。
+默认安装两部分：阅读进度桥，以及 Talebook WebDAV 上传完成触发。App 上传 `book.db` 或 `bookProgress/*.json` 后，桥会在几秒内运行；10 分钟扫描作为兜底。
 
-安装器会先备份 Talebook 的 WebDAV 文件，再注入触发代码。备份在容器内：
-
-```text
-/var/tmp/reading-progress-bridge/webdav-backup/dav_provider.py
-```
-
-如果只想安装桥、不改 Talebook WebDAV：
-
-```sh
-sudo sh install-reading-progress-bridge.sh --no-event-trigger
-```
-
-也可以直接指定容器和数据目录：
-
-```sh
-sudo sh install-reading-progress-bridge.sh talebook /srv/talebook/data
-```
-
-第一次安装只做检查，不写阅读进度。确认输出里的书和方向没问题后，再打开写入：
+第一次安装默认只干跑，不写阅读进度。确认输出里的书和方向后再执行：
 
 ```sh
 sudo sh install-reading-progress-bridge.sh --apply
 ```
 
-也可以先把安装器解开查看，不执行安装：
+只安装桥、不注入 Talebook WebDAV：
 
 ```sh
-sh install-reading-progress-bridge.sh --extract-only /tmp/reading-progress-bridge
+sudo sh install-reading-progress-bridge.sh --no-event-trigger
 ```
 
-## 运行方式
+安装器会备份被注入的 Talebook 文件。Talebook 容器重建后重新执行安装器即可补回注入。
 
-安装脚本会把程序放到数据目录的 `.reading-progress-bridge/`，并在 Talebook 容器里注册为 supervisord 程序。默认每 10 分钟检查一次，容器重启后会跟着启动。
+## 错误通知
+
+页渡者会把无法自动处理的情况写入日志。安装器还会在 Talebook 管理员设置页加入“页渡者错误通知”区块，通知方式是下拉选择：`关闭`、`Webhook` 或 `Telegram Bot`；选择后只显示对应配置，并提供测试发送按钮。
+
+配置保存在数据目录的 `.reading-progress-bridge/notify.json`。Bot Token 只由后端使用，设置页返回时会掩码显示。
+
+如果当前 Talebook 版本的设置页结构无法匹配，安装器会停止注入并保留原文件。
+
+## 运行与配置
+
+程序位于数据目录的 `.reading-progress-bridge/`，由 Talebook 容器内 supervisord 管理。配置文件是 `.reading-progress-bridge/config.json`：
+
+```json
+{
+  "interval_seconds": 600,
+  "threshold_chars": 200,
+  "threshold_percent": 0.3,
+  "apply": false
+}
+```
+
+`apply=false` 只计算，`apply=true` 才写入。跨软件 epub 使用 CFI，txt 使用字节偏移和切章规则；安卓与安卓之间不换算。写入前会备份到 `reader/<用户号>/backup/bridge/`。
+
+日志：
+
+```sh
+docker exec talebook tail -f /var/tmp/reading-progress-bridge/run.log
+```
+
+## 边界
+
+- 不会替 App 点击云端进度确认。
+- txt 第一次跨端使用时，先在 iOS 端打开并同步，再在安卓端打开。
+- 无法匹配书籍、切章失败或内容不一致时跳过并记录日志。
+- 目前跨软件支持 epub 和 txt；pdf、mobi、azw3、cbz 暂不处理。
+
+## 卸载
+
+```sh
+sudo sh uninstall.sh talebook /srv/talebook/data
+```
+
+`uninstall.sh` 会尝试恢复 WebDAV 和设置页备份，不删除书库、阅读进度或桥的备份。
+
+## 测试
+
+```sh
+python3 test/test_config.py
+python3 test/test_cfi.py
+python3 test/test_txt.py
+python3 test/test_e2e_txt.py
+```
+
+## 许可
+
+MIT，见 [LICENSE](LICENSE)。
