@@ -45,7 +45,7 @@ def _trigger_progress_bridge(path):
 
 
 def patch(s):
-    if MARKER in s:
+    if MARKER in s or "class _ProgressTriggerFile" in s:
         return s, False
     if "from wsgidav.fs_dav_provider import FilesystemProvider" not in s:
         raise SystemExit("找不到 FilesystemProvider 导入，Talebook WebDAV 结构不匹配")
