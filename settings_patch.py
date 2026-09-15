@@ -62,7 +62,7 @@ class PageFerrymanNotify(BaseHandler):
     def put(self):
         if not self.admin_user:
             return {"err": "permission"}
-        from page_ferryman_notify import send
+        from webserver.page_ferryman_notify import send
         data = tornado.escape.json_decode(self.request.body)
         return {"err": "ok" if send({"kind": "test", "message": data.get("message", "页渡者测试消息")}) else "notify_failed"}
 '''
